@@ -1,0 +1,6 @@
+D:\RealTimeFinancialAnomalyDetection\src\main\java\com\example\flink\StockDataProducer.java
+D:\RealTimeFinancialAnomalyDetection\src\main\java\com\example\flink\AnomalyAlert.java
+D:\RealTimeFinancialAnomalyDetection\src\main\java\com\example\flink\ParseStockDataFunction.java
+D:\RealTimeFinancialAnomalyDetection\src\main\java\com\example\flink\StockPrice.java
+D:\RealTimeFinancialAnomalyDetection\src\main\java\com\example\flink\AnomalyDetectionFunction.java
+D:\RealTimeFinancialAnomalyDetection\src\main\java\com\example\flink\StockPriceConsumer.java

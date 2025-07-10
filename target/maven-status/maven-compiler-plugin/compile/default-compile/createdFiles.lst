@@ -1,0 +1,9 @@
+com\example\flink\StockPriceConsumer.class
+com\example\flink\StockPriceConsumer$1.class
+com\example\flink\StockPriceConsumer$2.class
+com\example\flink\StockPriceConsumer$DataRouter.class
+com\example\flink\AnomalyAlert.class
+com\example\flink\StockDataProducer.class
+com\example\flink\AnomalyDetectionFunction.class
+com\example\flink\StockPrice.class
+com\example\flink\ParseStockDataFunction.class
