@@ -98,13 +98,13 @@ tail -f /cygdrive/c/flink-1.17.1/log/flink-*-taskexecutor-*.out
 ```
 
 
-Project Pipeline Flow:
+## Project Pipeline Flow:
 
 PSX Data API → Kafka Producer → Kafka Topic → Flink → 
 [Calculate indicators] → [Detect anomalies] → [Send alerts]
 
 
-Java components:
+## Java components:
 
 StockPrice.java: The POJO for stock price data.
 
@@ -117,31 +117,31 @@ AnomalyDetectionFunction.java: A Flink ProcessWindowFunction to detect anomalies
 StockPriceConsumer.java: The main Flink application class for consuming stock prices and applying anomaly detection. Sets up a Kafka source, parses the data, applies a windowed process function for anomaly detection, and prints the results.
 
 
-Python Component:
+## Python Component:
 
 psx_kafka_producer.py: Sends data to Kafka
 
-Detailed Description of Key Components and How They Work Together:
+## Detailed Description of Key Components and How They Work Together:
 
-psx_kafka_producer.py (Python Producer):
+### psx_kafka_producer.py (Python Producer):
 
 This Python script will continuously fetch (or generate mock) PSX stock data, economic indicators, and news sentiment.
 
 It serializes this data into JSON strings and sends them to the Kafka topics (psx-stock-prices, psx-economic-data, psx-news-sentiment).
 
-StockPrice.java (Java POJO):
+### StockPrice.java (Java POJO):
 
 Defines the structure for the stock price data within the Flink application. Flink can efficiently work with POJOs.
 
-ParseStockDataFunction.java (Flink MapFunction):
+### ParseStockDataFunction.java (Flink MapFunction):
 
 When Flink reads a JSON string from Kafka, this function will convert that string into a StockPrice Java object. This is crucial for structured processing in Flink.
 
-AnomalyAlert.java (Java POJO):
+### AnomalyAlert.java (Java POJO):
 
 Defines the structure for the output of the anomaly detection, including the symbol, message, current price, and expected price.
 
-AnomalyDetectionFunction.java (Flink ProcessWindowFunction):
+### AnomalyDetectionFunction.java (Flink ProcessWindowFunction):
 
 This is the core of the anomaly detection logic.
 
@@ -155,7 +155,7 @@ It also checks for high volatility based on the price range within the window.
 
 When an anomaly is detected, it emits an AnomalyAlert object.
 
-StockPriceConsumer.java (Main Flink Application):
+### StockPriceConsumer.java (Main Flink Application):
 
 Sets up the Flink execution environment.
 
