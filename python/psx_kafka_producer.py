@@ -6,6 +6,7 @@ from datetime import datetime
 import pandas as pd
 from bs4 import BeautifulSoup
 import logging
+import re
 import random
 
 # Configure logging
@@ -21,9 +22,11 @@ class PSXDataProducer:
         )
         
         # Major PSX companies to track (Pakistan Stock Exchange symbols)
+        # Major PSX companies to track (Pakistan Stock Exchange symbols)
+        # This list should be regularly updated to reflect current market listings.
         self.major_stocks = [
-            'HBL', 'UBL', 'OGDC', 'PSO', 'LUCK', 'ENGRO', 'HUBC', 'BAHL',
-            'NESTLE', 'HABIBBANK', 'MCB', 'FATIMA', 'FFBL', 'KAPCO', 'MARI'
+            'HBL', 'UBL', 'OGDC', 'PSO', 'LUCK', 'HUBC', 'BAHL',
+            'NESTLE', 'MCB', 'KAPCO', 'MARI', 'PTCL', 'PAKT', 'SSGC', 'TGL'
         ]
         
         # Alpha Vantage API base (using free tier with API key)
@@ -70,7 +73,7 @@ class PSXDataProducer:
                     'function': 'TIME_SERIES_DAILY',
                     'symbol': symbol + '.PK',  # Append .PK for Pakistan Stock Exchange
                     'apikey': self.alpha_vantage_api_key,
-                    'outputsize': 'compact'
+                    'outputsize': 'full'
                 }
                 response = requests.get(self.alpha_vantage_base, params=params, timeout=10)
                 response.raise_for_status()
@@ -101,10 +104,10 @@ class PSXDataProducer:
         
         for symbol in self.major_stocks:
             base_price = {
-                'HBL': 150.0, 'UBL': 180.0, 'OGDC': 85.0, 'PSO': 220.0,
-                'LUCK': 650.0, 'ENGRO': 280.0, 'HUBC': 120.0, 'BAHL': 45.0,
-                'NESTLE': 6500.0, 'HABIBBANK': 75.0, 'MCB': 200.0, 'FATIMA': 25.0,
-                'FFBL': 18.0, 'KAPCO': 35.0, 'MARI': 1200.0
+                'HBL': 160.0, 'UBL': 190.0, 'OGDC': 90.0, 'PSO': 230.0,
+                'LUCK': 680.0, 'HUBC': 130.0, 'BAHL': 50.0,
+                'NESTLE': 6800.0, 'MCB': 210.0, 'KAPCO': 40.0, 'MARI': 1250.0,
+                'PTCL': 15.0, 'PAKT': 1500.0, 'SSGC': 12.0, 'TGL': 80.0
             }.get(symbol, 100.0)
             
             price_change = random.uniform(-0.05, 0.05)
@@ -127,32 +130,89 @@ class PSXDataProducer:
         
         return mock_data
     
+    def _scrape_dawn_economic_data(self):
+        """Scrape economic indicators from Dawn.com"""
+        scraped_data = {}
+        try:
+            url = "https://www.dawn.com/business/economy"  # Example URL for economy section
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.content, 'html.parser')
+
+            # Attempt to find exchange rate (USD to PKR)
+            # This is highly dependent on Dawn.com's HTML structure and may need adjustment
+            exchange_rate_element = soup.find(lambda tag: "USD to PKR" in tag.get_text() or "Dollar" in tag.get_text())
+            if exchange_rate_element:
+                # Look for a number in the vicinity of the text
+                match = re.search(r'\d+\.?\d*', exchange_rate_element.get_text())
+                if match:
+                    scraped_data['exchange_rate'] = {
+                        'USD_PKR': float(match.group(0)),
+                        'timestamp': int(time.time() * 1000),
+                        'source': 'dawn.com'
+                    }
+
+            # Attempt to find inflation rate
+            inflation_element = soup.find(lambda tag: "inflation" in tag.get_text() or "CPI" in tag.get_text())
+            if inflation_element:
+                match = re.search(r'\d+\.?\d*%', inflation_element.get_text())
+                if match:
+                    scraped_data['inflation_rate'] = {
+                        'rate': float(match.group(0).replace('%', '')),
+                        'timestamp': int(time.time() * 1000),
+                        'source': 'dawn.com'
+                    }
+
+            # Attempt to find interest rate (policy rate)
+            interest_rate_element = soup.find(lambda tag: "interest rate" in tag.get_text() or "policy rate" in tag.get_text())
+            if interest_rate_element:
+                match = re.search(r'\d+\.?\d*%', interest_rate_element.get_text())
+                if match:
+                    scraped_data['interest_rate'] = {
+                        'rate': float(match.group(0).replace('%', '')),
+                        'timestamp': int(time.time() * 1000),
+                        'source': 'dawn.com'
+                    }
+
+        except Exception as e:
+            logger.error(f"Error scraping Dawn.com for economic indicators: {e}")
+        return scraped_data
+
     def fetch_economic_indicators(self):
         """Fetch Pakistani economic indicators from web sources"""
+        economic_data = {}
         try:
-            # Using approximate values from recent trends (e.g., State Bank of Pakistan data)
-            indicators = {
-                'exchange_rate': {
-                    'USD_PKR': 278.50,  # Approx. rate as of July 2025 from web trends
-                    'timestamp': int(time.time() * 1000),
-                    'source': 'web_estimate'
-                },
-                'inflation_rate': {
-                    'rate': 22.5,  # Approx. based on recent Pakistan Bureau of Statistics data
-                    'timestamp': int(time.time() * 1000),
-                    'source': 'web_estimate'
-                },
-                'interest_rate': {
-                    'rate': 20.5,  # Approx. State Bank of Pakistan policy rate
-                    'timestamp': int(time.time() * 1000),
-                    'source': 'web_estimate'
+            # Try to scrape from Dawn.com first
+            scraped_data = self._scrape_dawn_economic_data()
+            if scraped_data:
+                economic_data = scraped_data
+                logger.info("Successfully scraped economic data from Dawn.com")
+            else:
+                logger.warning("Dawn.com scraping failed or found no data, using approximate values.")
+                # Fallback to approximate values if scraping fails
+                economic_data = {
+                    'exchange_rate': {
+                        'USD_PKR': 278.50,  # Approx. rate as of July 2025 from web trends
+                        'timestamp': int(time.time() * 1000),
+                        'source': 'web_estimate'
+                    },
+                    'inflation_rate': {
+                        'rate': 22.5,  # Approx. based on recent Pakistan Bureau of Statistics data
+                        'timestamp': int(time.time() * 1000),
+                        'source': 'web_estimate'
+                    },
+                    'interest_rate': {
+                        'rate': 20.5,  # Approx. State Bank of Pakistan policy rate
+                        'timestamp': int(time.time() * 1000),
+                        'source': 'web_estimate'
+                    }
                 }
-            }
             
-            return indicators
+            return economic_data
             
         except Exception as e:
-            logger.error(f"Error fetching economic indicators: {e}")
+            logger.error(f"Error in fetch_economic_indicators: {e}")
             return {}
 
     def fetch_news_sentiment(self):
@@ -169,7 +229,13 @@ class PSXDataProducer:
             response = requests.get(news_url, params=params, timeout=10)
             response.raise_for_status()
             
-            articles = response.json().get('articles', [])
+            data = response.json()
+            articles = data.get('articles', [])
+            
+            if not articles:
+                logger.warning(f"NewsAPI returned no articles for query. Response: {data}")
+                return None
+
             if articles:
                 article = articles[0]  # Take the most recent article
                 # Simple sentiment analysis (positive/negative/neutral based on title keywords)
