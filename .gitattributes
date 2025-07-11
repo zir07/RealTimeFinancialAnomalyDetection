@@ -1,5 +1,5 @@
 # Vendored dependencies
-kafka_2.13-3.6.0/ linguist-vendored
+kafka_2.13-3.6.0/** linguist-vendored
 
 # Generated files
 classes/ linguist-vendored
