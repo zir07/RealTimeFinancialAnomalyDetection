@@ -1,0 +1,5 @@
+# Kafka logs
+kafka_2.13-3.6.0/logs/
+
+# Python __pycache__
+**/__pycache__/
