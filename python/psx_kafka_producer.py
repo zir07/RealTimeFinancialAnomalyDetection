@@ -134,7 +134,7 @@ class PSXDataProducer:
         """Scrape economic indicators from Dawn.com"""
         scraped_data = {}
         try:
-            url = "https://www.dawn.com/business/economy"  # Example URL for economy section
+            url = "https://www.dawn.com/business"  # Updated URL for economy section
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
             response = requests.get(url, headers=headers, timeout=10)
             response.raise_for_status()
@@ -193,19 +193,19 @@ class PSXDataProducer:
                 # Fallback to approximate values if scraping fails
                 economic_data = {
                     'exchange_rate': {
-                        'USD_PKR': 278.50,  # Approx. rate as of July 2025 from web trends
+                        'USD_PKR': 285.0,  # Updated based on user input
                         'timestamp': int(time.time() * 1000),
-                        'source': 'web_estimate'
+                        'source': 'user_input'
                     },
                     'inflation_rate': {
-                        'rate': 22.5,  # Approx. based on recent Pakistan Bureau of Statistics data
+                        'rate': 3.2,  # Updated based on user input
                         'timestamp': int(time.time() * 1000),
-                        'source': 'web_estimate'
+                        'source': 'user_input'
                     },
                     'interest_rate': {
-                        'rate': 20.5,  # Approx. State Bank of Pakistan policy rate
+                        'rate': 11.0,  # Updated based on user input
                         'timestamp': int(time.time() * 1000),
-                        'source': 'web_estimate'
+                        'source': 'user_input'
                     }
                 }
             
@@ -289,20 +289,19 @@ class PSXDataProducer:
                 psx_portal_data = self.scrape_psx_data_portal()
                 alpha_vantage_data = self.fetch_from_alpha_vantage()
                 
-                # If no real data, use mock data for testing
-                if not psx_portal_data and not alpha_vantage_data:
+                stock_data_sent = False
+                alpha_vantage_data = self.fetch_from_alpha_vantage()
+                
+                if alpha_vantage_data and 'Time Series (Daily)' in alpha_vantage_data:
+                    for data in alpha_vantage_data:
+                        self.send_to_kafka('psx-stock-prices', data, key=data['symbol'])
+                        stock_data_sent = True
+                
+                if not stock_data_sent:
                     logger.info("Using mock data for testing...")
                     mock_data = self.generate_mock_psx_data()
-                    
                     for stock in mock_data:
                         self.send_to_kafka('psx-stock-prices', stock, key=stock['symbol'])
-                
-                # Send real data if available
-                for data in psx_portal_data:
-                    self.send_to_kafka('psx-stock-prices', data)
-                
-                for data in alpha_vantage_data:
-                    self.send_to_kafka('psx-stock-prices', data, key=data['symbol'])
                 
                 # Fetch and send economic indicators
                 logger.info("Fetching economic indicators...")
@@ -336,7 +335,7 @@ if __name__ == "__main__":
     producer = PSXDataProducer()
     
     try:
-        producer.run_producer(interval=30)  # Send data every 30 seconds
+        producer.run_producer(interval=10)  # Send data every 10 seconds
     except KeyboardInterrupt:
         print("\nShutting down producer...")
     finally:
