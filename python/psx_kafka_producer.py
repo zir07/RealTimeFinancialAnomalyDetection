@@ -29,9 +29,7 @@ class PSXDataProducer:
             'NESTLE', 'MCB', 'KAPCO', 'MARI', 'PTCL', 'PAKT', 'SSGC', 'TGL'
         ]
         
-        # Alpha Vantage API base (using free tier with API key)
-        self.alpha_vantage_api_key = "V82JOP0J9K6JF98T"  # Replace with your API key from alphavantage.co
-        self.alpha_vantage_base = "https://www.alphavantage.co/query"
+        self.psx_terminal_base = "https://psxterminal.com/api"
     
     def scrape_psx_data_portal(self):
         """Scrape limited data from PSX Data Portal (note: limited public data available)"""
@@ -63,39 +61,33 @@ class PSXDataProducer:
             logger.error(f"Error scraping PSX data portal: {e}")
             return []
 
-    def fetch_from_alpha_vantage(self):
-        """Fetch stock data from Alpha Vantage API"""
+    def fetch_from_psx_terminal(self):
+        """Fetch stock data from PSX Terminal API"""
         try:
             stock_data = []
             for symbol in self.major_stocks:
-                # Use Alpha Vantage TIME_SERIES_DAILY endpoint for daily stock data
-                params = {
-                    'function': 'TIME_SERIES_DAILY',
-                    'symbol': symbol + '.PK',  # Append .PK for Pakistan Stock Exchange
-                    'apikey': self.alpha_vantage_api_key,
-                    'outputsize': 'full'
-                }
-                response = requests.get(self.alpha_vantage_base, params=params, timeout=10)
+                response = requests.get(f"{self.psx_terminal_base}/yields/{symbol}", timeout=10)
                 response.raise_for_status()
                 
                 data = response.json()
-                if 'Time Series (Daily)' in data:
-                    latest_date = list(data['Time Series (Daily)'].keys())[0]
-                    daily_data = data['Time Series (Daily)'][latest_date]
+                if data.get('success') and data.get('data') and 'price' in data['data']:
+                    yield_data = data['data']
                     stock_data.append({
-                        'source': 'alpha_vantage',
+                        'source': 'psx_terminal',
                         'symbol': symbol,
-                        'price': float(daily_data['4. close']),
-                        'volume': int(daily_data['5. volume']),
-                        'timestamp': int(datetime.strptime(latest_date, '%Y-%m-%d').timestamp() * 1000),
+                        'price': float(yield_data['price']),
+                        'volume': int(yield_data.get('volume30Avg', 0)),
+                        'timestamp': int(time.time() * 1000),
                         'market': 'PSX',
                         'currency': 'PKR'
                     })
-            
+                else:
+                    logger.warning(f"Could not find price data for {symbol} in PSX Terminal response.")
+
             return stock_data
             
         except Exception as e:
-            logger.error(f"Error fetching from Alpha Vantage: {e}")
+            logger.error(f"Error fetching from PSX Terminal: {e}")
             return []
 
     def generate_mock_psx_data(self):
@@ -285,20 +277,18 @@ class PSXDataProducer:
                 # Fetch stock data from multiple sources
                 logger.info("Fetching PSX stock data...")
                 
-                # Try real data sources first
-                psx_portal_data = self.scrape_psx_data_portal()
-                alpha_vantage_data = self.fetch_from_alpha_vantage()
-                
+                # Fetch stock data from PSX Terminal
+                psx_terminal_data = self.fetch_from_psx_terminal()
+
                 stock_data_sent = False
-                alpha_vantage_data = self.fetch_from_alpha_vantage()
-                
-                if alpha_vantage_data and 'Time Series (Daily)' in alpha_vantage_data:
-                    for data in alpha_vantage_data:
+                if psx_terminal_data:
+                    logger.info("Successfully fetched live data from PSX Terminal.")
+                    for data in psx_terminal_data:
                         self.send_to_kafka('psx-stock-prices', data, key=data['symbol'])
-                        stock_data_sent = True
-                
+                    stock_data_sent = True
+
                 if not stock_data_sent:
-                    logger.info("Using mock data for testing...")
+                    logger.warning("Failed to fetch live data from PSX Terminal, falling back to mock data.")
                     mock_data = self.generate_mock_psx_data()
                     for stock in mock_data:
                         self.send_to_kafka('psx-stock-prices', stock, key=stock['symbol'])
