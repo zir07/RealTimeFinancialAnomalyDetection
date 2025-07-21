@@ -26,7 +26,7 @@ class PSXDataProducer:
         # This list should be regularly updated to reflect current market listings.
         self.major_stocks = [
             'HBL', 'UBL', 'OGDC', 'PSO', 'LUCK', 'HUBC', 'BAHL',
-            'NESTLE', 'MCB', 'KAPCO', 'MARI', 'PTCL', 'PAKT', 'SSGC', 'TGL'
+            'NESTLE', 'MCB', 'KAPCO', 'MARI', 'PTC', 'PAKT', 'SSGC', 'TGL'
         ]
         
         self.psx_terminal_base = "https://psxterminal.com/api"
