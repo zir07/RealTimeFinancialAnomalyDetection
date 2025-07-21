@@ -188,18 +188,32 @@ class AnomalyDetectionGUI(QMainWindow):
         self.stock_chart_ax.set_xlabel("Time (seconds)")
         self.stock_chart_ax.set_ylabel("Value")
         self.stock_chart_ax.grid(True)
-        self.stock_chart_ax.autoscale_view(scalex=True, scaley=True) # Auto-scale X and Y
-
         # Plot based on selection
         if self.displayed_stock == "All Stocks":
             for s, data_points in self.stock_data.items():
                 self.stock_chart_ax.plot(data_points['x'], data_points['y'], label=s)
                 logger.info(f"Plotting {s}: x_len={len(data_points['x'])}, y_len={len(data_points['y'])}")
+            self.stock_chart_ax.autoscale_view(True, True, True)
         else:
             s = self.displayed_stock
             if s in self.stock_data:
                 data_points = self.stock_data[s]
                 self.stock_chart_ax.plot(data_points['x'], data_points['y'], label=s)
+                
+                # Dynamic Y-axis scaling for individual stocks
+                if data_points['y']:
+                    min_val = min(data_points['y'])
+                    max_val = max(data_points['y'])
+                    
+                    if min_val == max_val:
+                        # If there's no fluctuation, add a small, fixed margin
+                        margin = 1.0
+                        self.stock_chart_ax.set_ylim(min_val - margin, max_val + margin)
+                    else:
+                        # Otherwise, add a margin based on the data's range
+                        data_range = max_val - min_val
+                        margin = data_range * 0.1  # 10% padding
+                        self.stock_chart_ax.set_ylim(min_val - margin, max_val + margin)
                 logger.info(f"Plotting {s}: x_len={len(data_points['x'])}, y_len={len(data_points['y'])}")
 
         self.stock_chart_ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
