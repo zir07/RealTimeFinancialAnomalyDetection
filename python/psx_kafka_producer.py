@@ -22,73 +22,81 @@ class PSXDataProducer:
         )
         
         # Major PSX companies to track (Pakistan Stock Exchange symbols)
-        # Major PSX companies to track (Pakistan Stock Exchange symbols)
-        # This list should be regularly updated to reflect current market listings.
         self.major_stocks = [
             'HBL', 'UBL', 'OGDC', 'PSO', 'LUCK', 'HUBC', 'BAHL',
             'NESTLE', 'MCB', 'KAPCO', 'MARI', 'PTC', 'PAKT', 'SSGC', 'TGL'
         ]
         
-        self.psx_terminal_base = "https://psxterminal.com/api"
+        self.last_prices = {}
     
     def scrape_psx_data_portal(self):
-        """Scrape limited data from PSX Data Portal (note: limited public data available)"""
-        try:
-            url = "https://dps.psx.com.pk/"  # PSX Data Portal homepage
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-            
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Extract index data (limited to visible text due to lack of API)
-            indices_data = []
-            for element in soup.find_all(['div', 'span', 'td']):
-                text = element.get_text(strip=True)
-                if 'KSE-100' in text or any(stock in text for stock in self.major_stocks):
-                    indices_data.append({
-                        'source': 'psx_data_portal',
-                        'data': text,
-                        'timestamp': int(time.time() * 1000)
-                    })
-            
-            return indices_data if indices_data else []
-            
-        except Exception as e:
-            logger.error(f"Error scraping PSX data portal: {e}")
-            return []
-
-    def fetch_from_psx_terminal(self):
-        """Fetch stock data from PSX Terminal API"""
-        try:
-            stock_data = []
-            for symbol in self.major_stocks:
-                response = requests.get(f"{self.psx_terminal_base}/yields/{symbol}", timeout=10)
+        """Scrape live stock data from the PSX Data Portal for major stocks."""
+        stock_data = []
+        for symbol in self.major_stocks:
+            try:
+                url = f"https://dps.psx.com.pk/company/{symbol}"
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+                
+                response = requests.get(url, headers=headers, timeout=10)
                 response.raise_for_status()
                 
-                data = response.json()
-                if data.get('success') and data.get('data') and 'price' in data['data']:
-                    yield_data = data['data']
-                    stock_data.append({
-                        'source': 'psx_terminal',
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # Find the price element
+                # Find the price element using the provided CSS selector
+                price_element = soup.select_one("#quote > div.company__quote > div.quote__details > div.quote__price > div.quote__close")
+                
+                price = None
+                if price_element:
+                    price_text = price_element.get_text(strip=True)
+                    # Clean the price string: remove "Rs." and commas, then convert to float
+                    cleaned_price_str = price_text.replace("Rs.", "").replace(",", "").strip()
+                    try:
+                        price = float(cleaned_price_str)
+                    except ValueError:
+                        logger.error(f"Could not convert price '{price_text}' to float for {symbol}.")
+                        price = None # Ensure price is None if conversion fails
+
+                if price is not None:
+                    # Find the volume element (assuming it's still in 'quote__volume')
+                    volume_element = soup.find('div', class_='quote__volume')
+                    volume = 0
+                    if volume_element:
+                        volume_text = volume_element.get_text(strip=True)
+                        volume = int(re.sub(r'[^\d]', '', volume_text))
+
+                    data = {
+                        'source': 'psx_data_portal',
                         'symbol': symbol,
-                        'price': float(yield_data['price']),
-                        'volume': int(yield_data.get('volume30Avg', 0)),
+                        'price': price,
+                        'volume': volume,
                         'timestamp': int(time.time() * 1000),
                         'market': 'PSX',
                         'currency': 'PKR'
-                    })
+                    }
+                    stock_data.append(data)
+                    
+                    # Anomaly detection
+                    if symbol in self.last_prices and abs(price - self.last_prices.get(symbol, 0)) > 1:
+                        anomaly_data = {
+                            'symbol': symbol,
+                            'price_change': price - self.last_prices[symbol],
+                            'current_price': price,
+                            'last_price': self.last_prices[symbol],
+                            'timestamp': int(time.time() * 1000)
+                        }
+                        self.send_to_kafka('anomaly-alerts', anomaly_data, key=symbol)
+                    
+                    self.last_prices[symbol] = price
                 else:
-                    logger.warning(f"Could not find price data for {symbol} in PSX Terminal response.")
+                    logger.warning(f"Could not find or parse price for {symbol} on PSX Data Portal.")
 
-            return stock_data
-            
-        except Exception as e:
-            logger.error(f"Error fetching from PSX Terminal: {e}")
-            return []
+            except Exception as e:
+                logger.error(f"Error scraping PSX data for {symbol}: {e}")
+        
+        return stock_data
 
     def generate_mock_psx_data(self):
         """Generate mock PSX data for testing purposes (used as fallback)"""
@@ -212,13 +220,18 @@ class PSXDataProducer:
         try:
             news_api_key = "a04df0c503334aceb2a64c9570d7ca04"  # Replace with your key from newsapi.org
             news_url = "https://newsapi.org/v2/everything"
+            headers = {
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            }
             params = {
                 'q': 'pakistan stock market OR psx OR financial market',
                 'apiKey': news_api_key,
                 'language': 'en',
-                'pageSize': 5
+                'pageSize': 5,
+                'sortBy': 'publishedAt'
             }
-            response = requests.get(news_url, params=params, timeout=10)
+            response = requests.get(news_url, params=params, headers=headers, timeout=10)
             response.raise_for_status()
             
             data = response.json()
@@ -271,27 +284,24 @@ class PSXDataProducer:
     def run_producer(self, interval=5):
         """Main producer loop"""
         logger.info("Starting PSX Data Producer...")
-        
+
         while True:
             try:
-                # Fetch stock data from multiple sources
+                # Fetch stock data from PSX Data Portal
                 logger.info("Fetching PSX stock data...")
-                
-                # Fetch stock data from PSX Terminal
-                psx_terminal_data = self.fetch_from_psx_terminal()
+                psx_data = self.scrape_psx_data_portal()
 
-                stock_data_sent = False
-                if psx_terminal_data:
-                    logger.info("Successfully fetched live data from PSX Terminal.")
-                    for data in psx_terminal_data:
+                if psx_data:
+                    logger.info("Successfully fetched live data from PSX Data Portal.")
+                    for data in psx_data:
                         self.send_to_kafka('psx-stock-prices', data, key=data['symbol'])
-                    stock_data_sent = True
-
-                if not stock_data_sent:
-                    logger.warning("Failed to fetch live data from PSX Terminal, falling back to mock data.")
+                else:
+                    logger.warning("Failed to fetch live data from PSX Data Portal, falling back to mock data.")
                     mock_data = self.generate_mock_psx_data()
                     for stock in mock_data:
                         self.send_to_kafka('psx-stock-prices', stock, key=stock['symbol'])
+                        # Update last_prices for anomaly detection even with mock data
+                        self.last_prices[stock['symbol']] = stock['price']
                 
                 # Fetch and send economic indicators
                 logger.info("Fetching economic indicators...")
@@ -308,7 +318,6 @@ class PSXDataProducer:
                 
                 logger.info(f"Data sent successfully. Waiting {interval} seconds...")
                 time.sleep(interval)
-                
             except KeyboardInterrupt:
                 logger.info("Producer stopped by user")
                 break
