@@ -241,16 +241,16 @@ class AnomalyDetectionGUI(QMainWindow):
         self.anomaly_table.insertRow(row_position)
 
         timestamp = data.get('timestamp', '')
-        topic = data.get('topic', '')
-        key = data.get('key', '')
-        value = str(data.get('value', ''))
-        anomaly_score = str(data.get('anomaly_score', ''))
+        symbol = data.get('symbol', '')
+        price_change = data.get('price_change', '')
+        current_price = data.get('current_price', '')
+        last_price = data.get('last_price', '')
 
         self.anomaly_table.setItem(row_position, 0, QTableWidgetItem(str(timestamp)))
-        self.anomaly_table.setItem(row_position, 1, QTableWidgetItem(topic))
-        self.anomaly_table.setItem(row_position, 2, QTableWidgetItem(key))
-        self.anomaly_table.setItem(row_position, 3, QTableWidgetItem(value))
-        self.anomaly_table.setItem(row_position, 4, QTableWidgetItem(anomaly_score))
+        self.anomaly_table.setItem(row_position, 1, QTableWidgetItem("Stock Price Anomaly"))
+        self.anomaly_table.setItem(row_position, 2, QTableWidgetItem(symbol))
+        self.anomaly_table.setItem(row_position, 3, QTableWidgetItem(f"Price changed by {price_change:.2f} from {last_price} to {current_price}"))
+        self.anomaly_table.setItem(row_position, 4, QTableWidgetItem("N/A"))
 
         self.anomaly_table.scrollToBottom()
 
